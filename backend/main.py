@@ -1,70 +1,163 @@
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, WebSocket
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 import cv2
+import asyncio
+import base64
 import numpy as np
-import os
-import tempfile
-from datetime import datetime
-import shutil
+from ultralytics import YOLO
 
 app = FastAPI()
 
-@app.post("/process-video/")
-async def process_video(file: UploadFile = File(...)):
-    # Create temporary files for input and output
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as temp_input:
-        # Save uploaded video to temporary file
-        shutil.copyfileobj(file.file, temp_input)
-        input_path = temp_input.name
+# Configure CORS to allow requests from Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    output_path = f"output_{datetime.now().strftime('%Y%m%d_%H%M%S')}.mp4"
+model = YOLO('models/best.pt')
 
-    # Process video with OpenCV
-    cap = cv2.VideoCapture(input_path)
-    if not cap.isOpened():
-        return {"error": "Could not open video file"}
+def draw_detections(frame, results):
+    """Draw bounding boxes and labels on the frame"""
+    for result in results:
+        boxes = result.boxes
+        if boxes is not None:
+            for box in boxes:
+                # Get coordinates
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                
+                # Get confidence and class
+                confidence = box.conf[0].cpu().numpy()
+                class_id = int(box.cls[0].cpu().numpy())
+                
+                # Get class name
+                class_name = model.names[class_id]
+                
+                # Only draw if confidence is above threshold
+                if confidence > 0.5:
+                    # Draw bounding box
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    
+                    # Create label with class name and confidence
+                    label = f"{class_name}: {confidence:.2f}"
+                    
+                    # Get text size for background rectangle
+                    (text_width, text_height), _ = cv2.getTextSize(
+                        label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1
+                    )
+                    
+                    # Draw background rectangle for text
+                    cv2.rectangle(
+                        frame, 
+                        (x1, y1 - text_height - 10), 
+                        (x1 + text_width, y1), 
+                        (0, 255, 0), 
+                        -1
+                    )
+                    
+                    # Draw text
+                    cv2.putText(
+                        frame,
+                        label,
+                        (x1, y1 - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.6,
+                        (0, 0, 0),  # Black text
+                        1,
+                        cv2.LINE_AA
+                    )
+    return frame
 
-    # Get video properties
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+@app.websocket("/ws/video")
+async def video_websocket(websocket: WebSocket):
+    await websocket.accept()
+    cap = cv2.VideoCapture(0)  # or video source
+    
+    # Set camera properties for better performance
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    
+    try:
+        while True:
+            ret, frame = cap.read()
 
-    # Define codec and create VideoWriter
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+            if ret:
+                # Run YOLO inference
+                results = model(frame, verbose=False, device='cuda')
+                
+                # Draw detections on frame
+                frame_with_detections = draw_detections(frame, results)
+                
+                # Optional: Add frame info
+                cv2.putText(
+                    frame_with_detections,
+                    f"Objects detected: {len(results[0].boxes) if results[0].boxes is not None else 0}",
+                    (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.7,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA
+                )
+                
+                # Encode frame as JPEG
+                _, buffer = cv2.imencode('.jpg', frame_with_detections, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                
+                # Convert to base64
+                frame_base64 = base64.b64encode(buffer).decode('utf-8')
+                await websocket.send_text(f"data:image/jpeg;base64,{frame_base64}")
+                
+            await asyncio.sleep(0.033)  # ~30 FPS
+    except Exception as e:
+        print(f"Error in video stream: {e}")
+    finally:
+        cap.release()
 
-    start_time = datetime.now()
-    while cap.isOpened():
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        # Calculate elapsed time for stopwatch
-        elapsed = (datetime.now() - start_time).total_seconds()
-        minutes = int(elapsed // 60)
-        seconds = int(elapsed % 60)
-        stopwatch_text = f"{minutes:02d}:{seconds:02d}"
-
-        # Overlay stopwatch in top-right corner
-        cv2.putText(
-            frame,
-            stopwatch_text,
-            (width - 150, 50),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1,
-            (255, 255, 255),
-            2,
-            cv2.LINE_AA,
-        )
-
-        out.write(frame)
-
-    # Release resources
-    cap.release()
-    out.release()
-
-    # Remove temporary input file
-    os.remove(input_path)
-
-    # Return the processed video
-    return FileResponse(output_path, media_type="video/mp4", filename="processed_video.mp4")
+# Optional: Add endpoint to get detection data separately
+@app.websocket("/ws/detections")
+async def detections_websocket(websocket: WebSocket):
+    await websocket.accept()
+    cap = cv2.VideoCapture(0)
+    
+    try:
+        while True:
+            ret, frame = cap.read()
+            
+            if ret:
+                # Run YOLO inference
+                results = model(frame, verbose=False)
+                
+                # Extract detection data
+                detections = []
+                for result in results:
+                    boxes = result.boxes
+                    if boxes is not None:
+                        for box in boxes:
+                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                            confidence = float(box.conf[0].cpu().numpy())
+                            class_id = int(box.cls[0].cpu().numpy())
+                            class_name = model.names[class_id]
+                            
+                            if confidence > 0.5:
+                                detections.append({
+                                    "class_name": class_name,
+                                    "confidence": confidence,
+                                    "bbox": [float(x1), float(y1), float(x2), float(y2)]
+                                })
+                
+                # Send detection data as JSON
+                await websocket.send_json({
+                    "detections": detections,
+                    "timestamp": asyncio.get_event_loop().time()
+                })
+                
+            await asyncio.sleep(0.1)  # 10 FPS for detection data
+            
+    except Exception as e:
+        print(f"Error in detection stream: {e}")
+    finally:
+        cap.release()
