@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@techstark/opencv-js": "^4.11.0-release.1",
     "axios": "^1.10.0",
     "next": "15.3.4",
     "react": "^19.0.0",
