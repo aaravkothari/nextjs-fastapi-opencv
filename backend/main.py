@@ -20,56 +20,76 @@ app.add_middleware(
 
 model = YOLO('models/best.pt')
 
-def draw_detections(frame, results):
+BALL_CLASS_ID = 0  # update if different
+FOOT_CLASS_ID = 1
+
+def draw_detections(frame, results, juggle_count, is_below):
     """Draw bounding boxes and labels on the frame"""
+
+    
+    was_above = True # old algorithm
+    was_below = False
+    foot_top_y = None
+    ball_bottom_y = None
+    
+    print('funciton called')
+
     for result in results:
+        print(f"top of is below: {is_below}")
         boxes = result.boxes
         if boxes is not None:
             for box in boxes:
-                # Get coordinates
-                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                cls_id = int(box.cls[0])
+                x1, y1, x2, y2 = map(int, box.xyxy[0].cpu().numpy())
                 
-                # Get confidence and class
-                confidence = box.conf[0].cpu().numpy()
-                class_id = int(box.cls[0].cpu().numpy())
+
+                # Draw bounding boxes
+                label = "Foot" if cls_id == FOOT_CLASS_ID else "Ball" if cls_id == BALL_CLASS_ID else str(cls_id)
                 
-                # Get class name
-                class_name = model.names[class_id]
                 
-                # Only draw if confidence is above threshold
-                if confidence > 0.5:
-                    # Draw bounding box
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    
-                    # Create label with class name and confidence
-                    label = f"{class_name}: {confidence:.2f}"
-                    
-                    # Get text size for background rectangle
-                    (text_width, text_height), _ = cv2.getTextSize(
-                        label, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 1
-                    )
-                    
-                    # Draw background rectangle for text
-                    cv2.rectangle(
-                        frame, 
-                        (x1, y1 - text_height - 10), 
-                        (x1 + text_width, y1), 
-                        (0, 255, 0), 
-                        -1
-                    )
-                    
-                    # Draw text
-                    cv2.putText(
-                        frame,
-                        label,
-                        (x1, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 0, 0),  # Black text
-                        1,
-                        cv2.LINE_AA
-                    )
-    return frame
+                if cls_id == FOOT_CLASS_ID:
+                    color = (0, 255, 0) 
+                elif cls_id == BALL_CLASS_ID:
+                    color = (0, 0, 255)
+                else:
+                    color = (255, 0, 0) 
+                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                cv2.putText(frame, f'{label}', (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+                # print('Label', label, '| box_id', box_id)
+
+                if cls_id == FOOT_CLASS_ID:
+                    if foot_top_y == None:
+                        foot_top_y = y1  # top of foot bounding box
+                        # print('Found Foot')
+                    else:
+                        if foot_top_y > y1:
+                            # print('Lower Foot:', foot_top_y)
+                            foot_top_y = y1
+                            # print('Higher Foot:', foot_top_y)
+
+                elif cls_id == BALL_CLASS_ID:
+                    ball_bottom_y = y2  # bottom of ball bounding box
+
+        if foot_top_y is not None and ball_bottom_y is not None:
+            print(f'ball_bottom_y: {ball_bottom_y} and foot_top_y: {foot_top_y}')
+            print(f'is_below: {is_below}')
+            print(f"juggle_count: {juggle_count}")
+
+            if not is_below and ball_bottom_y > foot_top_y:
+                is_below = True
+                print('is_below now true')
+            elif is_below and ball_bottom_y < foot_top_y:
+                is_below = False
+                juggle_count += 1
+
+        # Overlay juggle count on frame
+        cv2.putText(frame, f'Juggles: {juggle_count}', (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+
+        # Write frame to output
+        # cv2.imshow("Juggle Counter", frame)
+
+    return frame, juggle_count, is_below
 
 @app.websocket("/ws/video")
 async def video_websocket(websocket: WebSocket):
@@ -77,32 +97,39 @@ async def video_websocket(websocket: WebSocket):
     cap = cv2.VideoCapture(0)  # or video source
     
     # Set camera properties for better performance
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
     cap.set(cv2.CAP_PROP_FPS, 30)
+
+    juggle_count = 0
+    is_below = False
     
     try:
         while True:
             ret, frame = cap.read()
 
             if ret:
+                frame = cv2.flip(frame, 1)
+
                 # Run YOLO inference
                 results = model(frame, verbose=False, device='cuda')
                 
                 # Draw detections on frame
-                frame_with_detections = draw_detections(frame, results)
+                frame_with_detections, juggle_count, is_below = draw_detections(frame, results, juggle_count, is_below)
+
+                # frame_with_detections = cv2.flip(frame_with_detections, 1)
                 
                 # Optional: Add frame info
-                cv2.putText(
-                    frame_with_detections,
-                    f"Objects detected: {len(results[0].boxes) if results[0].boxes is not None else 0}",
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7,
-                    (255, 255, 255),
-                    2,
-                    cv2.LINE_AA
-                )
+                # cv2.putText(
+                #     frame_with_detections,
+                #     f"Objects detected: {len(results[0].boxes) if results[0].boxes is not None else 0}",
+                #     (10, 30),
+                #     cv2.FONT_HERSHEY_SIMPLEX,
+                #     0.7,
+                #     (255, 255, 255),
+                #     2,
+                #     cv2.LINE_AA
+                # )
                 
                 # Encode frame as JPEG
                 _, buffer = cv2.imencode('.jpg', frame_with_detections, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -129,7 +156,7 @@ async def detections_websocket(websocket: WebSocket):
             
             if ret:
                 # Run YOLO inference
-                results = model(frame, verbose=False)
+                results = model(frame, verbose=False, device='cuda')
                 
                 # Extract detection data
                 detections = []
