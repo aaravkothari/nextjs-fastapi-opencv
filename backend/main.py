@@ -6,6 +6,8 @@ import asyncio
 import base64
 import numpy as np
 from ultralytics import YOLO
+import time
+from collections import defaultdict, deque
 
 app = FastAPI()
 
@@ -35,7 +37,7 @@ def draw_detections(frame, results, juggle_count, is_below):
     print('funciton called')
 
     for result in results:
-        print(f"top of is below: {is_below}")
+        # print(f"top of is below: {is_below}")
         boxes = result.boxes
         if boxes is not None:
             for box in boxes:
@@ -72,14 +74,14 @@ def draw_detections(frame, results, juggle_count, is_below):
                     ball_bottom_y = y2  # bottom of ball bounding box
 
         if foot_top_y is not None and ball_bottom_y is not None:
-            print(f'ball_bottom_y: {ball_bottom_y} and foot_top_y: {foot_top_y}')
-            print(f'is_below: {is_below}')
-            print(f"juggle_count: {juggle_count}")
+            # print(f'ball_bottom_y: {ball_bottom_y} and foot_top_y: {foot_top_y}')
+            # print(f'is_below: {is_below}')
+            # print(f"juggle_count: {juggle_count}")
 
-            if not is_below and ball_bottom_y > foot_top_y:
+            if not is_below and ball_bottom_y > (foot_top_y - 100):
                 is_below = True
-                print('is_below now true')
-            elif is_below and ball_bottom_y < foot_top_y:
+                # print('is_below now true')
+            elif is_below and ball_bottom_y < (foot_top_y - 100):
                 is_below = False
                 juggle_count += 1
 
@@ -99,7 +101,7 @@ async def video_websocket(websocket: WebSocket):
     # Set camera properties for better performance
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 720)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 360)
-    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_FPS, 100)
 
     juggle_count = 0
     is_below = False
