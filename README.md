@@ -1,1 +1,1 @@
-Random hi
+Random
