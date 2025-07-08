@@ -187,6 +187,6 @@ async def detections_websocket(websocket: WebSocket):
             await asyncio.sleep(0.1)  # 10 FPS for detection data
             
     except Exception as e:
-        print(f"Error in detection stream: {e}")
+        print(f"Error in detection stream: {e}")    
     finally:
         cap.release()
