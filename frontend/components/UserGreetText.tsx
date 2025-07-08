@@ -16,14 +16,13 @@ const UserGreetText = () => {
   }, []);
     if (user !== null) {
       return (
-        <div className="flex font-bold left-0 top-0 w-full justify-center m-2">
-          Welcome&nbsp;
+        <div className="flex font-bold left-0 top-0 justify-center m-2">Welcome&nbsp;
           <div className="font-bold">{user.user_metadata.full_name ?? "user"}!</div>
         </div>
       );
     }
   return (
-    <div className="flex font-bold left-0 top-0 w-full justify-center m-2">
+    <div className="flex font-bold left-0 top-0 justify-center m-2">
       Sign-in to get started
     </div>
   );

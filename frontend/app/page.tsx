@@ -6,7 +6,7 @@ import React from 'react'
 const Home = () => {
   return (
     <div>
-      <div className="flex justify-center my-8">
+      <div className="flex justify-center mt-8">
             
             <div className="m-6 flex justify-between items-center w-5/6 h-16 rounded-2xl px-7 bg-gray-100">
             <img src="Footy (1).png" className="h-52 mb-1"></img>

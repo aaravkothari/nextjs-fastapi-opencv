@@ -124,11 +124,11 @@ async def video_websocket(websocket: WebSocket):
                 # cv2.putText(
                 #     frame_with_detections,
                 #     f"Objects detected: {len(results[0].boxes) if results[0].boxes is not None else 0}",
-                #     (10, 30),
+                #     (10, 30),c
                 #     cv2.FONT_HERSHEY_SIMPLEX,
                 #     0.7,
                 #     (255, 255, 255),
-                #     2,
+                #     2
                 #     cv2.LINE_AA
                 # )
                 
@@ -137,7 +137,11 @@ async def video_websocket(websocket: WebSocket):
                 
                 # Convert to base64
                 frame_base64 = base64.b64encode(buffer).decode('utf-8')
-                await websocket.send_text(f"data:image/jpeg;base64,{frame_base64}")
+                # Send both frame and juggle count as JSON
+                await websocket.send_json({
+                    "frame": f"data:image/jpeg;base64,{frame_base64}",
+                    "juggles": juggle_count
+                })
                 
             await asyncio.sleep(0.033)  # ~30 FPS
     except Exception as e:
@@ -146,46 +150,46 @@ async def video_websocket(websocket: WebSocket):
         cap.release()
 
 # Optional: Add endpoint to get detection data separately
-@app.websocket("/ws/detections")
-async def detections_websocket(websocket: WebSocket):
-    await websocket.accept()
-    cap = cv2.VideoCapture(0)
+# @app.websocket("/ws/detections")
+# async def detections_websocket(websocket: WebSocket):
+#     await websocket.accept()
+#     cap = cv2.VideoCapture(0)
     
-    try:
-        while True:
-            ret, frame = cap.read()
+#     try:
+#         while True:
+#             ret, frame = cap.read()
             
-            if ret:
-                # Run YOLO inference
-                results = model(frame, verbose=False, device='cuda')
+#             if ret:
+#                 # Run YOLO inference
+#                 results = model(frame, verbose=False, device='cuda')
                 
-                # Extract detection data
-                detections = []
-                for result in results:
-                    boxes = result.boxes
-                    if boxes is not None:
-                        for box in boxes:
-                            x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                            confidence = float(box.conf[0].cpu().numpy())
-                            class_id = int(box.cls[0].cpu().numpy())
-                            class_name = model.names[class_id]
+#                 # Extract detection data
+#                 detections = []
+#                 for result in results:
+#                     boxes = result.boxes
+#                     if boxes is not None:
+#                         for box in boxes:
+#                             x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+#                             confidence = float(box.conf[0].cpu().numpy())
+#                             class_id = int(box.cls[0].cpu().numpy())
+#                             class_name = model.names[class_id]
                             
-                            if confidence > 0.5:
-                                detections.append({
-                                    "class_name": class_name,
-                                    "confidence": confidence,
-                                    "bbox": [float(x1), float(y1), float(x2), float(y2)]
-                                })
+#                             if confidence > 0.5:
+#                                 detections.append({
+#                                     "class_name": class_name,
+#                                     "confidence": confidence,
+#                                     "bbox": [float(x1), float(y1), float(x2), float(y2)]
+#                                 })
                 
-                # Send detection data as JSON
-                await websocket.send_json({
-                    "detections": detections,
-                    "timestamp": asyncio.get_event_loop().time()
-                })
+#                 # Send detection data as JSON
+#                 await websocket.send_json({
+#                     "detections": detections,
+#                     "timestamp": asyncio.get_event_loop().time()
+#                 })
                 
-            await asyncio.sleep(0.1)  # 10 FPS for detection data
+#             await asyncio.sleep(0.1)  # 10 FPS for detection data
             
-    except Exception as e:
-        print(f"Error in detection stream: {e}")    
-    finally:
-        cap.release()
+#     except Exception as e:
+#         print(f"Error in detection stream: {e}")    
+#     finally:
+#         cap.release()
