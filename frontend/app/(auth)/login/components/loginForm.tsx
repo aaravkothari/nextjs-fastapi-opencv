@@ -15,7 +15,7 @@ import SignInWithGoogleButton from "./SignInWithGoogleButton"
 
 export function LoginForm() {
   return (
-    <Card className="mx-auto max-w-sm">
+    <Card className="mx-auto w-96">
       <CardHeader>
         <CardTitle className="text-2xl">Login</CardTitle>
         <CardDescription>

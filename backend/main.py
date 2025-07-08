@@ -34,7 +34,6 @@ def draw_detections(frame, results, juggle_count, is_below):
     foot_top_y = None
     ball_bottom_y = None
     
-    print('funciton called')
 
     for result in results:
         # print(f"top of is below: {is_below}")
