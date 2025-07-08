@@ -85,7 +85,7 @@ def draw_detections(frame, results, juggle_count, is_below):
                 juggle_count += 1
 
         # Overlay juggle count on frame
-        cv2.putText(frame, f'Juggles: {juggle_count}', (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
+        # cv2.putText(frame, f'Juggles: {juggle_count}', (100, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 255, 255), 3)
 
         # Write frame to output
         # cv2.imshow("Juggle Counter", frame)

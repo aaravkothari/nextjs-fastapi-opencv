@@ -55,7 +55,7 @@ const VideoStream = () => {
   if (user !== null) {
     return (
       <>
-        <div className="flex justify-center">juggles: {juggles}</div>
+        <div className="flex justify-center text-6xl m-6">Juggles: {juggles}</div>
 
         {recording ? (
           <div className="flex justify-center mx-12">
