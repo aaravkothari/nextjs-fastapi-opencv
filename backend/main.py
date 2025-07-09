@@ -149,6 +149,8 @@ async def video_websocket(websocket: WebSocket):
     finally:
         cap.release()
 
+
+
 # Optional: Add endpoint to get detection data separately
 # @app.websocket("/ws/detections")
 # async def detections_websocket(websocket: WebSocket):

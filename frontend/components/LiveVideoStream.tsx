@@ -16,6 +16,7 @@ const VideoStream = () => {
   const [recording, setRecording] = useState<boolean>(false);
   const supabase = createClient();
   const [juggles, setJuggles] = useState<number>(0);
+  const [subJug, setSubJug] = useState<number>(0);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -55,7 +56,7 @@ const VideoStream = () => {
   if (user !== null) {
     return (
       <>
-        <div className="flex justify-center text-6xl m-6">Juggles: {juggles}</div>
+        <div className="flex justify-center text-6xl m-6">Juggles: {juggles - subJug}</div>
 
         {recording ? (
           <div className="flex justify-center mx-12">
@@ -91,13 +92,15 @@ const VideoStream = () => {
           </div>
         ) : (
           <div
-            onClick={() => {
-              setRecording(false);
-            }}
+            
             className="flex items-center justify-center text-lime-500 hover:cursor-pointer"
           >
-            <BsRecordBtn size="50" />
+            <div className="border-black border-2 text-lime-500 px-2 py-1 font-semibold bg-black rounded">Save Juggles</div>
+            <BsRecordBtn onClick={() => { setRecording(false)}} className="mx-10" size="50" />
+            <div className="border-black border-2 text-red-500 px-2 py-1 font-semibold bg-black rounded" onClick={() => {setSubJug(juggles)}}>Reset Juggles</div>
           </div>
+
+          
         )}
       </>
     );
